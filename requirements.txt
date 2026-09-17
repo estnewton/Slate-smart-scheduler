@@ -1,5 +1,6 @@
 # Core (needed to run the demo)
 pytest>=7.0
+streamlit>=1.30
 
 # Google Calendar integration
 google-auth-oauthlib>=1.0

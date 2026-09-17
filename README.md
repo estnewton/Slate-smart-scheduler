@@ -31,11 +31,12 @@ src/
   models.py                 Task / CalendarEvent data models
   scoring.py                 RICE-inspired relevance scoring (pure logic, fully tested)
   scheduler.py                Auto-generated prep tasks + location-aware daily planner
-  demo.py                     Runnable end-to-end demo, mock data, no credentials needed
+  demo.py                     Runnable end-to-end CLI demo, mock data, no credentials needed
   integrations/
     google_calendar.py        OAuth read-only sync (needs your own Google Cloud credentials)
     canvas.py                 Canvas REST API sync (needs your own Canvas access token)
     ics_sync.py                Import/export .ics — covers Apple Calendar, Outlook, etc.
+app.py                        Local web UI (Streamlit) — the one to demo in an interview
 tests/
   test_scoring.py
   test_scheduler.py
@@ -45,9 +46,15 @@ tests/
 
 ```bash
 pip install -r requirements.txt
-python -m src.demo          # runs the full pipeline on realistic mock data
+python -m src.demo          # CLI version, runs the full pipeline on realistic mock data
+streamlit run app.py        # Web UI version — opens at http://localhost:8501 in your browser
 python -m pytest tests/     # 9 tests covering scoring + scheduling logic
 ```
+
+The web UI shows the ranked task backlog, auto-generated exam/quiz prep, and today's
+location-sequenced plan side by side, plus a form to add your own tasks live. It runs on mock
+data out of the box; flip `USE_MOCK_DATA = False` at the top of `app.py` once your Google
+Calendar is connected (see below) to see your real schedule instead.
 
 ## Connecting your real calendars (optional)
 
