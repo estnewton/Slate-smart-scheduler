@@ -51,12 +51,17 @@ python -m pytest tests/     # 9 tests covering scoring + scheduling logic
 
 ## Connecting your real calendars (optional)
 
-Each integration module has setup instructions in its own docstring. Summary:
+**Recommended setup — one integration instead of two:** Canvas has a built-in "Calendar Feed"
+(Canvas → Calendar → bottom-right "Calendar Feed" link) — a private `.ics` URL you can subscribe
+to directly from Google Calendar (Google Calendar → Other calendars → **+** → **From URL** →
+paste the link). Every Canvas assignment and due date then shows up as a normal event on your
+Google Calendar automatically, kept in sync going forward with zero extra code. That means the
+app only needs to connect to **Google Calendar** — Canvas comes along for free.
 
 | Source | What you need | Setup effort |
 |---|---|---|
-| Google Calendar | A Google Cloud OAuth client (`credentials.json`) | ~10 min, one-time |
-| Canvas | A personal access token from your school's Canvas | ~2 min |
+| Google Calendar (recommended — also covers Canvas via the feed above) | A Google Cloud OAuth client (`credentials.json`) | ~10 min, one-time |
+| Canvas direct API (optional/advanced — only needed if the calendar feed doesn't expose something you want) | A personal access token from your school's Canvas | ~2 min |
 | Apple Calendar / Outlook / anything else | Export as `.ics`, point `ics_sync.import_ics()` at it | ~1 min |
 
 Credentials are never committed — `.gitignore` already excludes `credentials.json`, `token.json`,

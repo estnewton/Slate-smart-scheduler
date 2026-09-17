@@ -1,6 +1,11 @@
 """
-Canvas LMS sync -- pulls upcoming assignments/quizzes/exams so they can be turned into
-scored tasks automatically, instead of you re-checking Canvas by hand.
+Canvas LMS sync (OPTIONAL / ADVANCED).
+
+Before using this module, consider the simpler route: Canvas → Calendar → "Calendar Feed"
+(bottom right) gives you a private .ics URL. Subscribe to it directly in Google Calendar
+(Google Calendar → Other calendars → + → From URL) and your Canvas due dates show up there
+automatically — no code needed, and google_calendar.py already covers it. Use *this* module
+only if you need something the calendar feed doesn't expose (e.g. assignment descriptions).
 
 SETUP:
   1. In Canvas: Account -> Settings -> "+ New Access Token". Copy it once (Canvas won't show it again).
