@@ -1,0 +1,12 @@
+# Core (needed to run the demo)
+pytest>=7.0
+
+# Google Calendar integration
+google-auth-oauthlib>=1.0
+google-api-python-client>=2.0
+
+# Canvas integration
+requests>=2.31
+
+# .ics import/export (covers Apple Calendar, Outlook, etc.)
+icalendar>=5.0
