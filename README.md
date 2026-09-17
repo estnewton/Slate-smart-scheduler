@@ -1,7 +1,7 @@
 # Smart Scheduler
 
 A personal task organizer that syncs your class schedule (Canvas), calendar (Google Calendar,
-or anything exportable as `.ics` — Apple Calendar, Outlook), and ranks your to-do list the way
+or anything exportable as `.ics` - Apple Calendar, Outlook), and ranks your to-do list the way
 a product team ranks a feature backlog: using a RICE-inspired scoring model, adapted here as
 
     relevance_score = (urgency × importance × confidence) / effort
@@ -80,6 +80,6 @@ and `.env`.
 sequencing, Google Calendar + Canvas + `.ics` sync.
 
 **Not yet built (good "phase 2" story):** live business-hours-aware suggestions (e.g., "hit the
-gym before the coffee shop next door opens") — this needs a places/hours API (e.g., Google
+gym before the coffee shop next door opens") - this needs a places/hours API (e.g., Google
 Places) rather than manually-tagged locations, which is the natural next integration once the
 core scheduling logic is proven out.
