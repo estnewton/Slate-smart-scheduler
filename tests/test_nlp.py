@@ -48,3 +48,8 @@ def test_video_call_location():
     e = parse_event("Coffee chat with IBM recruiter thursday 2:30-3pm on zoom", BASE)
     assert e.title == "Coffee chat with IBM recruiter" and e.location == "Zoom"
     assert (e.start.hour, e.start.minute, e.end.hour) == (14, 30, 15)
+
+
+def test_same_hour_range_with_minutes():
+    e = parse_event("coffee chat with recruiter thursday 2-2:30pm on zoom", BASE)
+    assert (e.start.hour, e.start.minute, e.end.hour, e.end.minute) == (14, 0, 14, 30)

@@ -120,9 +120,20 @@ def _to_local_naive(raw: str) -> datetime:
     return dt
 
 
-def fetch_events(creds, start: datetime, end: datetime, only_tag: Optional[str] = None) -> List[CalendarEvent]:
-    """All events on the primary calendar between two naive local datetimes.
-    only_tag="slate=demo" limits it to events carrying that private tag (demo mode)."""
+def find_calendar(creds, name: str) -> Optional[str]:
+    """Calendar id for a calendar you own or can edit, matched by name (case/space-insensitive)."""
+    want = " ".join(name.split()).casefold()
+    for cal in _service(creds).calendarList().list().execute().get("items", []):
+        if " ".join(cal.get("summary", "").split()).casefold() == want and \
+                cal.get("accessRole") in ("owner", "writer"):
+            return cal["id"]
+    return None
+
+
+def fetch_events(creds, start: datetime, end: datetime, only_tag: Optional[str] = None,
+                 calendar_id: str = "primary") -> List[CalendarEvent]:
+    """All events on one calendar between two naive local datetimes.
+    only_tag="slate=demo" limits it to events carrying that private tag."""
     service = _service(creds)
     time_min = start.astimezone().isoformat()
     time_max = end.astimezone().isoformat()
@@ -131,7 +142,7 @@ def fetch_events(creds, start: datetime, end: datetime, only_tag: Optional[str] 
     page_token: Optional[str] = None
     while True:
         result = service.events().list(
-            calendarId="primary", timeMin=time_min, timeMax=time_max,
+            calendarId=calendar_id, timeMin=time_min, timeMax=time_max,
             singleEvents=True, orderBy="startTime", maxResults=250, pageToken=page_token,
             **({"privateExtendedProperty": only_tag} if only_tag else {}),
         ).execute()
@@ -164,8 +175,9 @@ def fetch_events(creds, start: datetime, end: datetime, only_tag: Optional[str] 
 # ---------------- writing ----------------
 
 def create_event(creds, title: str, start: datetime, end: datetime, all_day: bool = False,
-                 location: Optional[str] = None, tag: Optional[dict] = None) -> dict:
-    """Adds one event to the primary calendar. Returns Google's event resource."""
+                 location: Optional[str] = None, tag: Optional[dict] = None,
+                 calendar_id: str = "primary") -> dict:
+    """Adds one event to a calendar. Returns Google's event resource."""
     body = {"summary": title, "description": "Added from Slate"}
     if all_day:
         body["start"] = {"date": start.date().isoformat()}
@@ -177,10 +189,10 @@ def create_event(creds, title: str, start: datetime, end: datetime, all_day: boo
         body["location"] = location
     if tag:
         body["extendedProperties"] = {"private": tag}
-    return _service(creds).events().insert(calendarId="primary", body=body).execute()
+    return _service(creds).events().insert(calendarId=calendar_id, body=body).execute()
 
 
-def push_plan(creds, plan_items: list[dict], day: date) -> int:
+def push_plan(creds, plan_items: list[dict], day: date, calendar_id: str = "primary") -> int:
     """Writes the task blocks of a day plan to Google Calendar. Re-running replaces the
     blocks Slate added for that day earlier, so you never get duplicates."""
     service = _service(creds)
@@ -188,12 +200,12 @@ def push_plan(creds, plan_items: list[dict], day: date) -> int:
     day_end = day_start + timedelta(days=1)
 
     existing = service.events().list(
-        calendarId="primary", timeMin=day_start.astimezone().isoformat(),
+        calendarId=calendar_id, timeMin=day_start.astimezone().isoformat(),
         timeMax=day_end.astimezone().isoformat(), singleEvents=True,
         privateExtendedProperty="slate=plan",
     ).execute()
     for item in existing.get("items", []):
-        service.events().delete(calendarId="primary", eventId=item["id"]).execute()
+        service.events().delete(calendarId=calendar_id, eventId=item["id"]).execute()
 
     created = 0
     for item in plan_items:
@@ -209,7 +221,7 @@ def push_plan(creds, plan_items: list[dict], day: date) -> int:
         }
         if item.get("location"):
             body["location"] = item["location"]
-        service.events().insert(calendarId="primary", body=body).execute()
+        service.events().insert(calendarId=calendar_id, body=body).execute()
         created += 1
     return created
 

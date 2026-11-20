@@ -67,10 +67,10 @@ def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] =
                     source=TaskSource.AUTO_GENERATED,
                     tags=["quiz-prep"] + event.tags,
                 ))
-            morning_of = event.fixed_time - timedelta(hours=1)
+            morning_of = event.fixed_time  # due when the quiz starts, so it's planned right before it
             meal = ("breakfast" if event.fixed_time.hour < 11
                     else "lunch" if event.fixed_time.hour < 15 else "a snack")
-            if morning_of > now:
+            if morning_of - timedelta(minutes=15) > now:
                 generated.append(Task(
                     id=f"auto-{event.id}-breakfast",
                     title=f"Eat {meal} before {event.title}",

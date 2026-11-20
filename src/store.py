@@ -26,11 +26,17 @@ def demo_start():
     return date.fromisoformat(raw) if raw else None
 
 
-def set_demo_start(day) -> None:
+def set_demo_start(day, calendar_id: Optional[str] = None) -> None:
     with _lock:
         state = _read()
         state["demo_start"] = day.isoformat() if day else None
+        state["demo_calendar"] = calendar_id if day else None
         _write(state)
+
+
+def demo_calendar() -> str:
+    """Calendar the demo lives on ("primary" unless a dedicated demo calendar was used)."""
+    return _read().get("demo_calendar") or "primary"
 
 
 def _write(state: dict) -> None:
@@ -92,4 +98,4 @@ def set_done(task_id: str, done: bool) -> None:
 def reset() -> None:
     """Forget all added and completed tasks (used by the demo reset script)."""
     with _lock:
-        _write({"tasks": [], "done": [], "demo_start": None})
+        _write({"tasks": [], "done": [], "demo_start": None, "demo_calendar": None})

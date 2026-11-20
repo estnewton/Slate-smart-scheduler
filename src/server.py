@@ -96,7 +96,11 @@ def _load_tasks(today: datetime) -> tuple[list[Task], str]:
         try:
             events = gcal.fetch_events(creds, today - timedelta(days=1),
                                        today + timedelta(days=LOOKAHEAD_DAYS),
-                                       only_tag=gcal.DEMO_TAG if demo else None)
+                                       calendar_id=store.demo_calendar() if demo else "primary",
+                                       # a dedicated demo calendar is shown whole (so events you add
+                                       # there in Google Calendar appear too); on the main calendar,
+                                       # only the tagged demo events
+                                       only_tag=gcal.DEMO_TAG if demo and store.demo_calendar() == "primary" else None)
         except Exception as exc:  # network / revoked access -- surface it rather than 500 silently
             raise HTTPException(502, f"Couldn't reach Google Calendar: {exc}") from exc
         tasks, source = [_event_to_task(e) for e in events], "demo" if demo else "google"
@@ -213,7 +217,8 @@ def create_event(body: NewEvent):
     tag = {"slate": "demo"} if _demo_active() else None
     try:
         ev = gcal.create_event(creds, body.title.strip(), start, end, body.all_day,
-                               (body.location or "").strip() or None, tag)
+                               (body.location or "").strip() or None, tag,
+                               calendar_id=store.demo_calendar() if _demo_active() else "primary")
     except Exception as exc:
         raise HTTPException(502, f"Google Calendar rejected the event: {exc}") from exc
     return {"id": ev.get("id"), "link": ev.get("htmlLink"), "date": start.date().isoformat()}
@@ -266,7 +271,8 @@ def push_plan(date: Optional[str] = None, start_hour: int = 8, end_hour: int = 2
     plan = [{**p, "start": datetime.fromisoformat(p["start"]), "end": datetime.fromisoformat(p["end"])}
             for p in data["plan"]]
     try:
-        created = gcal.push_plan(creds, plan, day_dt.date())
+        created = gcal.push_plan(creds, plan, day_dt.date(),
+                                 calendar_id=store.demo_calendar() if _demo_active() else "primary")
     except Exception as exc:
         raise HTTPException(502, f"Google Calendar rejected the update: {exc}") from exc
     return {"created": created}

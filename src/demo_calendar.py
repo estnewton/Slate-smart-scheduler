@@ -2,7 +2,8 @@
 Puts a realistic student week on your connected Google Calendar (and a starter task list in
 Slate) so a live demo has something to show, and removes it all afterwards.
 
-    python -m src.demo_calendar seed --date 2027-01-11 # demo week starting that day (a Monday works best)
+    python -m src.demo_calendar seed --date 2027-01-11 # demo week on the "IBM DEMO" calendar
+    python -m src.demo_calendar seed --date 2027-01-11 --calendar primary   # ...or your main one
     python -m src.demo_calendar seed                  # ...or starting today
     python -m src.demo_calendar clear                 # remove it all and leave demo mode
 
@@ -20,6 +21,7 @@ from . import store
 from .integrations import google_calendar as gcal
 
 TAG = "slate=demo"
+DEFAULT_CALENDAR = "IBM DEMO"  # a separate Google calendar just for the demo (create it first)
 
 # (day offset, start "HH:MM", end "HH:MM", title, location, Google color id)
 # Color ids: 7 peacock (classes), 11 tomato (exams/quizzes), 2 sage (meetings),
@@ -38,7 +40,8 @@ EVENTS = [
     (1, "10:10", "11:00", "IE 302: Operations Research", "East Campus", "7"),
     (1, "12:00", "12:30", "Call Mom for her birthday", "Home", "3"),
     (1, "14:30", "15:15", "Mock interview with career services", "HUB", "2"),
-    (1, "18:00", "19:00", "Intramural volleyball", "West Campus Gym", "5"),
+    (1, "17:00", "18:00", "Math Quiz", "Wartik Lab", "11"),
+    (1, "18:15", "19:15", "Intramural volleyball", "West Campus Gym", "5"),
     # Wednesday
     (2, "09:05", "09:55", "IE 322 Quiz", "West Campus", "11"),
     (2, "11:30", "12:00", "Dr. Kim: dermatology follow-up", "University Health Services", "6"),
@@ -90,39 +93,62 @@ def _at(day: date, hhmm: str) -> datetime:
     return datetime.combine(day, time(h, m))
 
 
+def _calendar_ids(service, extra: str | None = None) -> list[str]:
+    """Primary + every calendar you own, so clear() finds demo events wherever they were put."""
+    ids = ["primary"]
+    for cal in service.calendarList().list().execute().get("items", []):
+        if cal.get("accessRole") == "owner" and not cal.get("primary"):
+            ids.append(cal["id"])
+    if extra and extra not in ids:
+        ids.append(extra)
+    return ids
+
+
 def clear() -> int:
-    """Deletes every event tagged slate=demo or slate=plan (from 60 days ago to ~13 months out),
-    resets Slate's local tasks, and turns demo mode off."""
+    """Deletes every event tagged slate=demo or slate=plan on any of your calendars (from 60 days
+    ago to ~13 months out), resets Slate's local tasks, and turns demo mode off. Untagged events,
+    including anything you added by hand to the demo calendar, are left alone."""
     service = gcal._service(_creds())
     start = datetime.combine(date.today(), time.min) - timedelta(days=60)
     end = start + timedelta(days=460)
     deleted = 0
-    for tag in (TAG, "slate=plan"):
-        page = None
-        while True:
-            res = service.events().list(
-                calendarId="primary", timeMin=start.astimezone().isoformat(),
-                timeMax=end.astimezone().isoformat(), singleEvents=True,
-                privateExtendedProperty=tag, pageToken=page, maxResults=250,
-            ).execute()
-            for item in res.get("items", []):
-                service.events().delete(calendarId="primary", eventId=item["id"]).execute()
-                deleted += 1
-            page = res.get("nextPageToken")
-            if not page:
-                break
+    for cal_id in _calendar_ids(service):
+        for tag in (TAG, "slate=plan"):
+            page = None
+            while True:
+                res = service.events().list(
+                    calendarId=cal_id, timeMin=start.astimezone().isoformat(),
+                    timeMax=end.astimezone().isoformat(), singleEvents=True,
+                    privateExtendedProperty=tag, pageToken=page, maxResults=250,
+                ).execute()
+                for item in res.get("items", []):
+                    service.events().delete(calendarId=cal_id, eventId=item["id"]).execute()
+                    deleted += 1
+                page = res.get("nextPageToken")
+                if not page:
+                    break
     store.reset()
     return deleted
 
 
-def seed(start_day: date) -> int:
+def seed(start_day: date, calendar_name: str = DEFAULT_CALENDAR) -> tuple[int, str]:
+    """Creates the demo week on the named calendar (or "primary"). Returns (count, calendar)."""
+    creds = _creds()
+    if calendar_name.strip().casefold() == "primary":
+        cal_id, label = "primary", "your main calendar"
+    else:
+        cal_id = gcal.find_calendar(creds, calendar_name)
+        if cal_id is None:
+            raise SystemExit(f"No calendar named \"{calendar_name}\" that you own. Create it in Google "
+                             "Calendar (Other calendars → + → Create new calendar) or pass --calendar primary.")
+        label = f"\"{calendar_name.strip()}\""
     clear()
-    service = gcal._service(_creds())
+    service = gcal._service(creds)
     private = {"private": {"slate": "demo"}}
     created = 0
     for offset, s, e, title, loc, color in EVENTS:
         d = start_day + timedelta(days=offset)
-        service.events().insert(calendarId="primary", body={
+        service.events().insert(calendarId=cal_id, body={
             "summary": title, "location": loc, "colorId": color,
             "start": {"dateTime": _at(d, s).astimezone().isoformat()},
             "end": {"dateTime": _at(d, e).astimezone().isoformat()},
@@ -131,7 +157,7 @@ def seed(start_day: date) -> int:
         created += 1
     for offset, title in ALL_DAY:
         d = start_day + timedelta(days=offset)
-        service.events().insert(calendarId="primary", body={
+        service.events().insert(calendarId=cal_id, body={
             "summary": title, "start": {"date": d.isoformat()},
             "end": {"date": (d + timedelta(days=1)).isoformat()},
             "transparency": "transparent", "extendedProperties": private,
@@ -143,8 +169,9 @@ def seed(start_day: date) -> int:
         if due_dt and start_day <= date.today() and due_dt < soonest:  # seeding mid-day: no overdue tasks
             due_dt = soonest.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         store.add_task(title, due_dt, effort, importance, loc)
-    store.set_demo_start(start_day)  # demo mode on: Slate shows only these events, from this day
-    return created
+    # demo mode on: Slate shows only this calendar's demo week, starting from this day
+    store.set_demo_start(start_day, cal_id)
+    return created, label
 
 
 def main():
@@ -153,12 +180,14 @@ def main():
     p_seed = sub.add_parser("seed", help="create the demo week (clears any previous one first)")
     p_seed.add_argument("--date", type=date.fromisoformat, default=date.today(),
                         help="first day of the demo week, YYYY-MM-DD (default: today)")
+    p_seed.add_argument("--calendar", default=DEFAULT_CALENDAR,
+                        help=f'calendar to put it on (default: "{DEFAULT_CALENDAR}"; use "primary" for your main one)')
     sub.add_parser("clear", help="remove demo events, Slate plan blocks and Slate's local tasks")
     args = parser.parse_args()
 
     if args.cmd == "seed":
-        n = seed(args.date)
-        print(f"Added {n} demo events starting {args.date:%a %b %d} and {len(TASKS)} tasks. "
+        n, label = seed(args.date, args.calendar)
+        print(f"Added {n} demo events to {label} starting {args.date:%a %b %d}, and {len(TASKS)} tasks. "
               "Refresh the web app.")
     else:
         print(f"Removed {clear()} Slate events, reset Slate's local tasks, and left demo mode.")

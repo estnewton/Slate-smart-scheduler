@@ -94,12 +94,16 @@ To give a live demo something to show, fill the connected calendar with a realis
 (classes, office hours, a quiz, a midterm, a Canvas due date) plus a starter task list:
 
 ```bash
-python -m src.demo_calendar seed --date 2027-01-11  # demo week starting that Monday
+python -m src.demo_calendar seed --date 2027-01-11  # demo week on the "IBM DEMO" calendar
+python -m src.demo_calendar seed --date 2027-01-11 --calendar primary  # ...or your main calendar
 python -m src.demo_calendar clear                   # remove it all and leave demo mode
 ```
 
-While a demo week is seeded, Slate is in **demo mode** (an orange "Demo week" badge): it reads
-*only* the demo events, nothing from your real schedule, and pins "now" to 8:00 AM on the first
+Create a separate calendar for it first (Google Calendar → Other calendars → + → Create new
+calendar). Then during the demo you can untick every other calendar in Google Calendar and show
+only the demo. While a demo week is seeded, Slate is in **demo mode** (an orange "Demo week" badge): it reads
+*only* the demo calendar (events you add to it by hand in Google Calendar show up too), nothing
+from your real schedule, and pins "now" to 8:00 AM on the first
 demo day, so the demo looks the same whenever you give it. Events added through Ask Slate during
 demo mode are tagged as demo events too.
 

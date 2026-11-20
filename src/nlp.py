@@ -87,7 +87,9 @@ def _parse_times(text: str):
         if ap2 and not ap1 and h1.lower() not in ("noon", "midnight"):
             s_try = _apply_meridiem(sh, ap2)
             e_try = _apply_meridiem(eh, ap2)
-            sh = s_try if s_try < e_try else _apply_meridiem(sh, "am")  # "11-1pm" -> 11am
+            # "2-2:30pm" -> 2pm; "11-1pm" -> 11am (compare hours *and* minutes)
+            ok = (s_try, int(m1 or 0)) < (e_try, int(m2 or 0))
+            sh = s_try if ok else _apply_meridiem(sh, "am")
             eh = e_try
         else:
             if h1.lower() not in ("noon", "midnight"):

@@ -86,3 +86,13 @@ def test_errand_is_batched_right_after_appointment_at_same_place():
     plan = build_daily_plan([doctor], [pickup], day.replace(hour=8), day.replace(hour=18), now=day)
     slot = next(p for p in plan if p["title"] == "Pick up prescription")
     assert slot["start"] == day.replace(hour=15)
+
+
+def test_meal_reminder_lands_right_before_the_quiz():
+    day = datetime(2026, 1, 1, 0, 0)
+    quiz = Task(id="q", title="Math Quiz", due=None, effort_minutes=0, importance=0,
+                fixed_time=day.replace(hour=17), end_time=day.replace(hour=18), location="Wartik Lab")
+    gen = auto_generate_prep_tasks([quiz], now=day.replace(hour=7))
+    plan = build_daily_plan([quiz], gen, day.replace(hour=8), day.replace(hour=22), now=day.replace(hour=7))
+    snack = next(p for p in plan if p["title"] == "Eat a snack before Math Quiz")
+    assert snack["end"] == day.replace(hour=17)
