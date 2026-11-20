@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from . import store
 from .demo import mock_week
+from .nlp import parse_event
 from .integrations import google_calendar as gcal
 from .models import Task, TaskSource
 from .scheduler import auto_generate_prep_tasks, build_daily_plan
@@ -24,6 +25,7 @@ from .scoring import rank_tasks, urgency
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 LOOKAHEAD_DAYS = 14  # how far ahead to read the calendar (exam prep starts a week out)
+DEMO_CLOCK = time(8, 0)  # demo mode: "now" is 8:00 AM on the first demo day
 
 app = FastAPI(title="Slate")
 
@@ -70,24 +72,40 @@ def _event_to_task(e) -> Task:
                 source=TaskSource.GOOGLE_CALENDAR, tags=["all-day"] if e.all_day else [])
 
 
+def _demo_active() -> bool:
+    return store.demo_start() is not None and gcal.load_credentials() is not None
+
+
+def _clock() -> tuple[date, datetime]:
+    """Slate's idea of "today" and "now". In demo mode the clock is pinned to 8:00 AM on the
+    first day of the seeded demo week, so the demo looks the same whenever it's given."""
+    if _demo_active():
+        return store.demo_start(), datetime.combine(store.demo_start(), DEMO_CLOCK)
+    real_now = datetime.now().replace(second=0, microsecond=0)
+    return real_now.date(), real_now
+
+
 def _load_tasks(today: datetime) -> tuple[list[Task], str]:
-    """Fixed + flexible tasks from Google Calendar if connected, otherwise demo data."""
+    """Fixed + flexible tasks from Google Calendar if connected, otherwise built-in sample data.
+    In demo mode only the seeded demo events are read -- nothing from the real schedule."""
     creds = gcal.load_credentials()
     if creds is None:
-        tasks, source = mock_week(today), "demo"
+        tasks, source = mock_week(today), "sample"
     else:
+        demo = _demo_active()
         try:
             events = gcal.fetch_events(creds, today - timedelta(days=1),
-                                       today + timedelta(days=LOOKAHEAD_DAYS))
+                                       today + timedelta(days=LOOKAHEAD_DAYS),
+                                       only_tag=gcal.DEMO_TAG if demo else None)
         except Exception as exc:  # network / revoked access -- surface it rather than 500 silently
             raise HTTPException(502, f"Couldn't reach Google Calendar: {exc}") from exc
-        tasks, source = [_event_to_task(e) for e in events], "google"
+        tasks, source = [_event_to_task(e) for e in events], "demo" if demo else "google"
     return tasks + store.manual_tasks(), source
 
 
 def _compute(day: date, start_hour: int, end_hour: int) -> dict:
-    now = datetime.now().replace(second=0, microsecond=0)
-    today = datetime.combine(date.today(), time.min)
+    today_date, now = _clock()
+    today = datetime.combine(today_date, time.min)
     day_dt = datetime.combine(day, time.min)
 
     tasks, source = _load_tasks(today)
@@ -100,13 +118,13 @@ def _compute(day: date, start_hour: int, end_hour: int) -> dict:
 
     ranked = rank_tasks(flexible + generated, now=now)
     plannable = flexible + generated
-    if day > date.today():
+    if day > today_date:
         # Looking ahead: anything due before that day is assumed handled by then.
         plannable = [t for t in plannable if t.due is None or t.due >= day_dt]
     plan = build_daily_plan(
         fixed_events=timed_fixed, flexible_tasks=plannable,
         day_start=day_dt.replace(hour=start_hour), day_end=day_dt.replace(hour=end_hour),
-        now=now, earliest=_round_up(now) if day == date.today() else None,
+        now=now, earliest=_round_up(now) if day == today_date else None,
     )
 
     def on_day(t: Task, d: datetime) -> bool:
@@ -122,6 +140,7 @@ def _compute(day: date, start_hour: int, end_hour: int) -> dict:
 
     return {
         "source": source,
+        "today": today_date.isoformat(),
         "date": day.isoformat(),
         "now": _iso(now),
         "hours": [start_hour, end_hour],
@@ -136,7 +155,7 @@ def _compute(day: date, start_hour: int, end_hour: int) -> dict:
 
 def _parse_day(value: Optional[str]) -> date:
     if not value:
-        return date.today()
+        return _clock()[0]
     try:
         return date.fromisoformat(value)
     except ValueError as exc:
@@ -147,8 +166,57 @@ def _parse_day(value: Optional[str]) -> date:
 
 @app.get("/api/status")
 def status():
+    today, now = _clock()
     return {"has_credentials": gcal.has_client_secrets(),
-            "connected": gcal.load_credentials() is not None}
+            "connected": gcal.load_credentials() is not None,
+            "demo": _demo_active(), "today": today.isoformat(), "now": _iso(now)}
+
+
+# ---------------- chat: sentence -> calendar event ----------------
+
+class ChatText(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+
+
+def _event_json(e) -> dict:
+    return {"title": e.title, "start": _iso(e.start), "end": _iso(e.end), "all_day": e.all_day,
+            "location": e.location, "notes": e.notes}
+
+
+@app.post("/api/chat/parse")
+def chat_parse(body: ChatText):
+    """Shows what Slate understood, before anything is written to the calendar."""
+    try:
+        return _event_json(parse_event(body.text, _clock()[0]))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class NewEvent(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    start: datetime
+    end: datetime
+    all_day: bool = False
+    location: Optional[str] = Field(default=None, max_length=200)
+
+
+@app.post("/api/events", status_code=201)
+def create_event(body: NewEvent):
+    creds = gcal.load_credentials()
+    if creds is None:
+        raise HTTPException(401, "Connect Google Calendar first.")
+    start, end = body.start.replace(tzinfo=None), body.end.replace(tzinfo=None)
+    if end <= start:
+        raise HTTPException(400, "The event has to end after it starts.")
+    # In demo mode, tag it like the other demo events so it shows in the demo and
+    # `demo_calendar clear` removes it afterwards. Otherwise it's a normal, permanent event.
+    tag = {"slate": "demo"} if _demo_active() else None
+    try:
+        ev = gcal.create_event(creds, body.title.strip(), start, end, body.all_day,
+                               (body.location or "").strip() or None, tag)
+    except Exception as exc:
+        raise HTTPException(502, f"Google Calendar rejected the event: {exc}") from exc
+    return {"id": ev.get("id"), "link": ev.get("htmlLink"), "date": start.date().isoformat()}
 
 
 @app.get("/api/dashboard")

@@ -98,6 +98,26 @@ code { font-size: 12.5px; background: var(--fixed-bg); padding: 1px 5px; border-
 .sync-btn span { display: inline-block; transition: transform .4s; }
 .sync-btn.spin span { transform: rotate(360deg); }
 
+.chip.demo { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* ---------- chat ---------- */
+.chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; margin-bottom: 12px; }
+.msg { max-width: 88%; padding: 8px 12px; border-radius: 14px; font-size: 13.5px; }
+.msg.you { align-self: flex-end; background: var(--slate); color: var(--surface); border-bottom-right-radius: 4px; }
+.msg.slate { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.ev-card { border-left: 3px solid var(--accent); padding-left: 10px; }
+.ev-title { font-weight: 600; }
+.ev-meta { color: var(--ink-2); font-size: 12.5px; }
+.msg-actions { display: flex; gap: 6px; margin-top: 8px; }
+.msg-actions .primary-btn { padding: 6px 12px; font-size: 13px; }
+.msg-note { color: var(--ink-3); font-size: 12px; margin-top: 6px; }
+.msg-done { color: var(--ok); font-size: 12.5px; font-weight: 500; margin-top: 6px; }
+.msg-done a { color: inherit; }
+.chat-form { display: flex; gap: 8px; }
+.chat-form input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
+.chat-form input:focus { outline: 2px solid var(--slate); outline-offset: -1px; }
+.chat-form .primary-btn { border-radius: 999px; width: 40px; padding: 0; font-size: 16px; }
+
 /* ---------- layout ---------- */
 .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; padding: 14px 28px 48px; align-items: start; }
 .side { display: grid; gap: 20px; }

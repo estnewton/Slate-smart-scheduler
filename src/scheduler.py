@@ -23,7 +23,8 @@ def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] =
     """
     Looks at titles of fixed calendar events for exam/quiz keywords and generates:
       - Exams/midterms  -> a study task 7 days before AND 1 day before
-      - Quizzes         -> a study task the night before, and a "good breakfast" reminder the morning of
+      - Quizzes         -> a review task the evening before (9pm), and a meal reminder an hour
+                           before (breakfast, lunch or a snack, depending on the quiz time)
     Generated tasks inherit the class location so they can be scheduled near where the class is.
     """
     now = now or datetime.now()
@@ -52,7 +53,8 @@ def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] =
                     ))
 
         elif any(k in title_lower for k in QUIZ_KEYWORDS):
-            night_before = event.fixed_time - timedelta(hours=15)  # ~previous evening
+            # the evening before (9pm), not a fixed offset that lands at 2am for an evening quiz
+            night_before = (event.fixed_time - timedelta(days=1)).replace(hour=21, minute=0)
             if night_before > now:
                 counter += 1
                 generated.append(Task(
@@ -66,10 +68,12 @@ def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] =
                     tags=["quiz-prep"] + event.tags,
                 ))
             morning_of = event.fixed_time - timedelta(hours=1)
+            meal = ("breakfast" if event.fixed_time.hour < 11
+                    else "lunch" if event.fixed_time.hour < 15 else "a snack")
             if morning_of > now:
                 generated.append(Task(
                     id=f"auto-{event.id}-breakfast",
-                    title=f"Eat breakfast before {event.title}",
+                    title=f"Eat {meal} before {event.title}",
                     due=morning_of,
                     effort_minutes=15,
                     importance=0.3,

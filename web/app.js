@@ -1,8 +1,11 @@
 // Slate front end: plain JS, no build step. Talks to the FastAPI backend in src/server.py.
 const $ = (sel) => document.querySelector(sel);
-const HOURS = [8, 20];
+const HOURS = [8, 22];
 
-const state = { date: isoDate(new Date()), status: null, data: null, openWhy: new Set() };
+const state = { date: null, status: null, data: null, openWhy: new Set() };
+// Slate's clock comes from the server: in demo mode "today" is the first day of the demo week.
+const nowDate = () => parseLocal(state.status?.now || isoDate(new Date()) + "T" + new Date().toTimeString().slice(0, 5));
+const todayIso = () => state.status?.today || isoDate(new Date());
 
 // ---------- date helpers ----------
 function isoDate(d) {
@@ -15,7 +18,7 @@ const fmtTime = (iso) => parseLocal(iso).toLocaleTimeString([], { hour: "numeric
 function fmtHour(h) { const d = new Date(); d.setHours(h, 0); return d.toLocaleTimeString([], { hour: "numeric" }); }
 function relDue(iso) {
   if (!iso) return "no deadline";
-  const due = parseLocal(iso), now = new Date();
+  const due = parseLocal(iso), now = nowDate();
   const mins = Math.round((due - now) / 60000);
   if (mins < 0) return "overdue";
   if (mins < 60) return `due in ${mins} min`;
@@ -54,7 +57,7 @@ function renderConnection() {
   const { connected, has_credentials } = state.status;
   const el = $("#connection");
   if (connected) {
-    el.innerHTML = `<span class="chip live"><span class="dot"></span>Google Calendar</span>
+    el.innerHTML = `${state.status.demo ? `<span class="chip demo" title="Showing only the seeded demo week, not your real schedule">Demo week</span>` : ""}<span class="chip live"><span class="dot"></span>Google Calendar</span>
       <button class="ghost-btn" id="disconnect">Disconnect</button>`;
     $("#disconnect").onclick = async () => {
       if (!confirm("Disconnect Google Calendar? Slate will go back to demo data.")) return;
@@ -72,7 +75,7 @@ function renderConnection() {
 }
 
 function renderDayTitle() {
-  const today = isoDate(new Date());
+  const today = todayIso();
   const d = parseLocal(state.date);
   let title = d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
   if (state.date === today) title = "Today";
@@ -107,8 +110,8 @@ function renderTimeline() {
       <span class="t">${esc(item.title)}</span><span class="m">${meta}</span></div>`;
   }
 
-  if (state.date === isoDate(new Date())) {
-    const now = (new Date() - dayStart) / 60000;
+  if (state.date === todayIso()) {
+    const now = (nowDate() - dayStart) / 60000;
     if (now >= 0 && now <= (h1 - h0) * 60) html += `<div class="nowline" style="top:${now * hourPx / 60}px"></div>`;
   }
   tl.innerHTML = html;
@@ -124,7 +127,8 @@ function layoutColumns(plan, minsFrom, hourPx) {
     .map((p) => {
       const top = Math.max(0, minsFrom(p.start)) * hourPx / 60;
       const dur = Math.max(minsFrom(p.end) - minsFrom(p.start), 0);
-      return { ...p, top, height: Math.max(dur * hourPx / 60 - 2, 17) };
+      const bottom = (HOURS[1] - HOURS[0]) * hourPx;  // clip events that run past the last hour
+      return { ...p, top, height: Math.max(Math.min(dur * hourPx / 60 - 2, bottom - top - 2), 17) };
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
 
@@ -214,14 +218,93 @@ async function load() {
   renderTimeline();
   renderLists();
   renderWeek();
-  $("#synced").textContent = `${state.data.source === "google" ? "Synced" : "Updated"} ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  $("#synced").textContent = `${state.data.source === "sample" ? "Updated" : "Synced"} ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }
 
 async function boot() {
   state.status = await api("/api/status");
+  if (!state.date || !state.status.demo !== !boot.wasDemo) state.date = state.status.today;
+  boot.wasDemo = state.status.demo;
   renderConnection();
+  renderChat();
   await load();
 }
+
+// ---------- chat: type a sentence, get a calendar event ----------
+const chat = { log: [], pending: null };
+
+function fmtEventWhen(ev) {
+  const d = parseLocal(ev.start);
+  const day = d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  return ev.all_day ? `${day} · all day` : `${day} · ${fmtTime(ev.start)}–${fmtTime(ev.end)}`;
+}
+
+function renderChat() {
+  const connected = state.status?.connected;
+  $("#chat-input").placeholder = 'Try "Math quiz Tuesday 5-6pm in Wartik Lab"';
+  $("#chat-log").innerHTML = chat.log.map((m) => {
+    if (m.role === "you") return `<div class="msg you">${esc(m.text)}</div>`;
+    if (m.role === "event") {
+      const ev = m.event;
+      const actions = m.status === "pending"
+        ? `<div class="msg-actions">
+             <button class="primary-btn" data-chat="add" ${connected ? "" : "disabled"}>Add to Google Calendar</button>
+             <button class="ghost-btn" data-chat="cancel">Cancel</button></div>
+           ${connected ? "" : `<div class="msg-note">Connect Google Calendar to add events.</div>`}`
+        : m.status === "added" ? `<div class="msg-done">✓ Added to Google Calendar${m.link ? ` · <a href="${esc(m.link)}" target="_blank" rel="noopener">open</a>` : ""}</div>`
+        : `<div class="msg-note">Not added.</div>`;
+      return `<div class="msg slate">
+        <div class="ev-card"><div class="ev-title">${esc(ev.title)}</div>
+          <div class="ev-meta">${esc(fmtEventWhen(ev))}${ev.location ? ` · ${esc(ev.location)}` : ""}</div></div>
+        ${ev.notes.map((n) => `<div class="msg-note">${esc(n)}</div>`).join("")}
+        ${actions}</div>`;
+    }
+    return `<div class="msg slate">${esc(m.text)}</div>`;
+  }).join("");
+  $("#chat-log").hidden = chat.log.length === 0;
+  const log = $("#chat-log");
+  log.scrollTop = log.scrollHeight;
+}
+
+$("#chat-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const input = $("#chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  chat.log.forEach((m) => { if (m.status === "pending") m.status = "skipped"; });
+  chat.log.push({ role: "you", text });
+  input.value = "";
+  try {
+    const event = await api("/api/chat/parse", { method: "POST", body: JSON.stringify({ text }) });
+    chat.log.push({ role: "event", event, status: "pending" });
+  } catch (err) {
+    chat.log.push({ role: "slate", text: err.message });
+  }
+  chat.log = chat.log.slice(-8);
+  renderChat();
+};
+
+$("#chat-log").onclick = async (e) => {
+  const action = e.target.dataset?.chat;
+  if (!action) return;
+  const msg = [...chat.log].reverse().find((m) => m.status === "pending");
+  if (!msg) return;
+  if (action === "cancel") { msg.status = "skipped"; renderChat(); return; }
+  e.target.disabled = true;
+  try {
+    const ev = msg.event;
+    const res = await api("/api/events", { method: "POST", body: JSON.stringify({
+      title: ev.title, start: ev.start, end: ev.end, all_day: ev.all_day, location: ev.location }) });
+    msg.status = "added";
+    msg.link = res.link;
+    state.date = res.date;  // jump to the day it was added, so it's visible right away
+    renderChat();
+    await load();
+  } catch (err) {
+    e.target.disabled = false;
+    flash(err.message, "error");
+  }
+};
 
 // ---------- events ----------
 $("#prev").onclick = () => { state.date = addDays(state.date, -1); load(); };
@@ -238,7 +321,7 @@ document.addEventListener("toggle", (e) => {
   const id = e.target.dataset?.why;
   if (id) e.target.open ? state.openWhy.add(id) : state.openWhy.delete(id);
 }, true);
-$("#today-btn").onclick = () => { state.date = isoDate(new Date()); load(); };
+$("#today-btn").onclick = () => { state.date = todayIso(); load(); };
 $("#week").onclick = (e) => {
   const b = e.target.closest("[data-day]");
   if (b) { state.date = b.dataset.day; load(); }

@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TOKEN_PATH = ROOT / "token.json"
 CREDENTIALS_PATH = ROOT / "credentials.json"
 SLATE_TAG = {"slate": "plan"}  # private extendedProperty marking events Slate created
+DEMO_TAG = "slate=demo"         # events created by `python -m src.demo_calendar seed`
 
 # state -> Flow, kept between /auth/login and /auth/callback (holds the PKCE code verifier)
 _pending_flows: dict = {}
@@ -119,8 +120,9 @@ def _to_local_naive(raw: str) -> datetime:
     return dt
 
 
-def fetch_events(creds, start: datetime, end: datetime) -> List[CalendarEvent]:
-    """All events on the primary calendar between two naive local datetimes."""
+def fetch_events(creds, start: datetime, end: datetime, only_tag: Optional[str] = None) -> List[CalendarEvent]:
+    """All events on the primary calendar between two naive local datetimes.
+    only_tag="slate=demo" limits it to events carrying that private tag (demo mode)."""
     service = _service(creds)
     time_min = start.astimezone().isoformat()
     time_max = end.astimezone().isoformat()
@@ -131,6 +133,7 @@ def fetch_events(creds, start: datetime, end: datetime) -> List[CalendarEvent]:
         result = service.events().list(
             calendarId="primary", timeMin=time_min, timeMax=time_max,
             singleEvents=True, orderBy="startTime", maxResults=250, pageToken=page_token,
+            **({"privateExtendedProperty": only_tag} if only_tag else {}),
         ).execute()
         for item in result.get("items", []):
             if item.get("status") == "cancelled":
@@ -159,6 +162,23 @@ def fetch_events(creds, start: datetime, end: datetime) -> List[CalendarEvent]:
 
 
 # ---------------- writing ----------------
+
+def create_event(creds, title: str, start: datetime, end: datetime, all_day: bool = False,
+                 location: Optional[str] = None, tag: Optional[dict] = None) -> dict:
+    """Adds one event to the primary calendar. Returns Google's event resource."""
+    body = {"summary": title, "description": "Added from Slate"}
+    if all_day:
+        body["start"] = {"date": start.date().isoformat()}
+        body["end"] = {"date": end.date().isoformat()}
+    else:
+        body["start"] = {"dateTime": start.astimezone().isoformat()}
+        body["end"] = {"dateTime": end.astimezone().isoformat()}
+    if location:
+        body["location"] = location
+    if tag:
+        body["extendedProperties"] = {"private": tag}
+    return _service(creds).events().insert(calendarId="primary", body=body).execute()
+
 
 def push_plan(creds, plan_items: list[dict], day: date) -> int:
     """Writes the task blocks of a day plan to Google Calendar. Re-running replaces the

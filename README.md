@@ -60,6 +60,9 @@ The web app shows:
 - **Day plan**: a timeline of your calendar events with Slate's suggested task blocks slotted into
   the gaps (location-aware, never in the past). Step through days with ‹ ›.
 - **Up next**: your backlog ranked by relevance score. Check tasks off, or remove ones you added.
+- **Ask Slate**: type an event the way you'd text it ("Math quiz Tuesday 5-6pm in Wartik Lab").
+  Slate shows what it understood, and one click adds it to Google Calendar. Quizzes and exams
+  you add this way immediately get prep tasks. Parsing is local and deterministic (`src/nlp.py`).
 - **Add a task**: title, due date, effort, importance, location. Saved locally across restarts.
 - **Auto prep**: study and review tasks generated from quizzes and exams on your calendar.
 - **This week**: a 7-day strip. Click a day to plan it.
@@ -91,13 +94,18 @@ To give a live demo something to show, fill the connected calendar with a realis
 (classes, office hours, a quiz, a midterm, a Canvas due date) plus a starter task list:
 
 ```bash
-python -m src.demo_calendar seed                    # week starting today
-python -m src.demo_calendar seed --date 2026-12-03  # or starting on a given day
-python -m src.demo_calendar clear                   # remove it all afterwards
+python -m src.demo_calendar seed --date 2027-01-11  # demo week starting that Monday
+python -m src.demo_calendar clear                   # remove it all and leave demo mode
 ```
 
-Demo events are privately tagged, so `clear` deletes only what `seed` created (plus Slate's plan
-blocks) and never your own events. `seed` clears first, so re-run it before each rehearsal.
+While a demo week is seeded, Slate is in **demo mode** (an orange "Demo week" badge): it reads
+*only* the demo events, nothing from your real schedule, and pins "now" to 8:00 AM on the first
+demo day, so the demo looks the same whenever you give it. Events added through Ask Slate during
+demo mode are tagged as demo events too.
+
+Demo events are privately tagged, so `clear` deletes only what `seed` (or Ask Slate in demo mode)
+created, plus Slate's plan blocks, and never your own events. `seed` clears first, so re-run it
+before each rehearsal.
 
 > While the OAuth consent screen is in *Testing* mode, Google expires the login after 7 days.
 > Reconnect shortly before a demo.

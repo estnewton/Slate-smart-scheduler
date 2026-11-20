@@ -19,6 +19,20 @@ def _read() -> dict:
     return json.loads(STATE_PATH.read_text())
 
 
+def demo_start():
+    """The first day of the seeded demo week, or None when demo mode is off."""
+    from datetime import date
+    raw = _read().get("demo_start")
+    return date.fromisoformat(raw) if raw else None
+
+
+def set_demo_start(day) -> None:
+    with _lock:
+        state = _read()
+        state["demo_start"] = day.isoformat() if day else None
+        _write(state)
+
+
 def _write(state: dict) -> None:
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = STATE_PATH.with_suffix(".tmp")
@@ -78,4 +92,4 @@ def set_done(task_id: str, done: bool) -> None:
 def reset() -> None:
     """Forget all added and completed tasks (used by the demo reset script)."""
     with _lock:
-        _write({"tasks": [], "done": []})
+        _write({"tasks": [], "done": [], "demo_start": None})
