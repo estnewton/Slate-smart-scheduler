@@ -53,3 +53,14 @@ def test_location_matching_task_is_preferred_next_to_matching_event():
     gym_idx = next(i for i, p in enumerate(plan) if p["title"] == "Gym")
     class_idx = next(i for i, p in enumerate(plan) if p["title"] == "Class")
     assert gym_idx < class_idx
+
+
+def test_earliest_keeps_tasks_out_of_the_past_but_keeps_fixed_events():
+    day = datetime(2026, 1, 1, 0, 0)
+    morning_class = Task(id="c", title="Class", due=None, effort_minutes=0, importance=0,
+                         fixed_time=day.replace(hour=9), end_time=day.replace(hour=10))
+    chore = Task(id="t", title="Chore", due=day.replace(hour=17), effort_minutes=30, importance=0.5)
+    plan = build_daily_plan([morning_class], [chore], day.replace(hour=8), day.replace(hour=18),
+                            now=day.replace(hour=13), earliest=day.replace(hour=13))
+    assert [p["title"] for p in plan] == ["Class", "Chore"]
+    assert plan[1]["start"] == day.replace(hour=13)

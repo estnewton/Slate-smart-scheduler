@@ -38,3 +38,4 @@ class CalendarEvent:
     location: Optional[str] = None
     description: Optional[str] = None
     source: TaskSource = TaskSource.GOOGLE_CALENDAR
+    all_day: bool = False            # all-day events (holidays, due dates) don't block time in the plan

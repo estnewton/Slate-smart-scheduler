@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Slate</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='6' width='24' height='20' rx='4' fill='%23334155'/><rect x='9' y='12' width='14' height='2.5' rx='1.25' fill='%23f8fafc'/><rect x='9' y='17.5' width='9' height='2.5' rx='1.25' fill='%23f8fafc'/></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="wordmark">Slate</span>
+      <span class="tagline">ranked tasks, planned around your calendar</span>
+    </div>
+    <div class="connection" id="connection"></div>
+  </header>
+
+  <div id="flash" class="flash" hidden></div>
+  <section id="setup" class="setup" hidden>
+    <strong>You're looking at demo data.</strong>
+    To use your real calendar, add a Google OAuth client as <code>credentials.json</code> in the
+    project folder (setup steps in the README), then restart the server. A
+    <em>Connect Google Calendar</em> button will show up here.
+  </section>
+
+  <nav class="daynav">
+    <div class="daynav-left">
+      <button class="icon-btn" id="prev" aria-label="Previous day">‹</button>
+      <h1 id="day-title">Today</h1>
+      <button class="icon-btn" id="next" aria-label="Next day">›</button>
+      <button class="ghost-btn" id="today-btn" hidden>Back to today</button>
+    </div>
+    <button class="primary-btn" id="push-btn" hidden>Add plan to Google Calendar</button>
+  </nav>
+
+  <main class="grid">
+    <section class="card plan-card">
+      <div class="card-head">
+        <h2>Day plan</h2>
+        <span class="legend"><i class="sw sw-fixed"></i>Calendar <i class="sw sw-task"></i>Slate</span>
+      </div>
+      <div id="allday" class="allday"></div>
+      <div id="timeline" class="timeline"></div>
+      <p id="plan-empty" class="empty" hidden>Nothing planned for this day.</p>
+    </section>
+
+    <div class="side">
+      <section class="card">
+        <div class="card-head">
+          <h2>Up next</h2>
+          <span class="hint" title="relevance = (urgency × importance × confidence) / effort">ranked by relevance ⓘ</span>
+        </div>
+        <ol id="ranked" class="tasklist"></ol>
+        <details id="done-wrap" class="done-wrap" hidden>
+          <summary>Completed <span id="done-count"></span></summary>
+          <ul id="done" class="tasklist done-list"></ul>
+        </details>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Add a task</h2></div>
+        <form id="add-form" class="add-form">
+          <input name="title" placeholder="What needs doing?" required maxlength="200" autocomplete="off">
+          <div class="row">
+            <label>Due<input name="due" type="datetime-local"></label>
+            <label>Effort<select name="effort">
+              <option value="15">15 min</option><option value="30" selected>30 min</option>
+              <option value="45">45 min</option><option value="60">1 hr</option>
+              <option value="90">1.5 hr</option><option value="120">2 hr</option><option value="180">3 hr</option>
+            </select></label>
+          </div>
+          <label class="importance">Importance <output id="imp-out">Medium</output>
+            <input name="importance" type="range" min="0" max="1" step="0.1" value="0.5">
+          </label>
+          <div class="row">
+            <input name="location" placeholder="Location (optional)" maxlength="100" list="locations" autocomplete="off">
+            <button class="primary-btn" type="submit">Add</button>
+          </div>
+          <datalist id="locations"></datalist>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Auto prep</h2>
+          <span class="hint">from Quiz / Exam / Midterm on your calendar</span>
+        </div>
+        <ul id="generated" class="plainlist"></ul>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>This week</h2></div>
+        <div id="week" class="week"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
