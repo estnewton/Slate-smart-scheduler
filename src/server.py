@@ -28,6 +28,15 @@ LOOKAHEAD_DAYS = 14  # how far ahead to read the calendar (exam prep starts a we
 app = FastAPI(title="Slate")
 
 
+@app.middleware("http")
+async def no_stale_ui(request: Request, call_next):
+    """Always revalidate the UI files, so a browser never runs an old app.js after an update."""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ---------------- helpers ----------------
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:

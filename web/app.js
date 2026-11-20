@@ -96,14 +96,14 @@ function renderTimeline() {
   const dayStart = parseLocal(state.date); dayStart.setHours(h0, 0, 0, 0);
   const minsFrom = (iso) => (parseLocal(iso) - dayStart) / 60000;
 
-  for (const item of plan) {
-    const top = Math.max(0, minsFrom(item.start)) * hourPx / 60;
-    const dur = Math.max(minsFrom(item.end) - minsFrom(item.start), 0);
-    const height = Math.max(dur * hourPx / 60 - 2, 20);
+  for (const item of layoutColumns(plan, minsFrom, hourPx)) {
+    const { top, height } = item;
     const short = height < 34;
     const meta = `${fmtTime(item.start)}–${fmtTime(item.end)}${item.location ? " · " + esc(item.location) : ""}`;
+    const width = `calc((100% - 10px) / ${item.cols} - 2px)`;
+    const left = `calc(6px + (100% - 10px) / ${item.cols} * ${item.col})`;
     html += `<div class="block ${item.kind === "fixed" ? "b-fixed" : "b-task"}${short ? " short" : ""}"
-      style="top:${top + 1}px;height:${height}px" title="${esc(item.title)} — ${meta}">
+      style="top:${top + 1}px;height:${height}px;left:${left};width:${width};right:auto" title="${esc(item.title)} — ${meta}">
       <span class="t">${esc(item.title)}</span><span class="m">${meta}</span></div>`;
   }
 
@@ -114,6 +114,33 @@ function renderTimeline() {
   tl.innerHTML = html;
   $("#plan-empty").hidden = plan.length > 0;
   $("#allday").innerHTML = all_day.map((t) => `<span>${esc(t)}</span>`).join("");
+}
+
+// Overlapping events (a quiz inside a lecture, a call during class) sit side by side, like
+// Google Calendar, instead of on top of each other. Overlap is judged on the drawn box, so
+// short events that render taller than their real length don't collide either.
+function layoutColumns(plan, minsFrom, hourPx) {
+  const items = plan
+    .map((p) => {
+      const top = Math.max(0, minsFrom(p.start)) * hourPx / 60;
+      const dur = Math.max(minsFrom(p.end) - minsFrom(p.start), 0);
+      return { ...p, top, height: Math.max(dur * hourPx / 60 - 2, 20) };
+    })
+    .sort((a, b) => a.top - b.top || b.height - a.height);
+
+  let cluster = [], colEnds = [], clusterEnd = -1;
+  const flush = () => { cluster.forEach((it) => (it.cols = colEnds.length)); cluster = []; colEnds = []; };
+  for (const it of items) {
+    if (it.top >= clusterEnd) flush();
+    let col = colEnds.findIndex((end) => end <= it.top);
+    if (col === -1) { col = colEnds.length; colEnds.push(0); }
+    colEnds[col] = it.top + it.height + 1;
+    it.col = col;
+    cluster.push(it);
+    clusterEnd = Math.max(clusterEnd, it.top + it.height + 1);
+  }
+  flush();
+  return items;
 }
 
 function taskRow(t, { max = 1, done = false } = {}) {
