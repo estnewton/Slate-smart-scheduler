@@ -89,13 +89,17 @@ def _location_match(a: Optional[str], b: Optional[str]) -> bool:
 
 def build_daily_plan(fixed_events: list[Task], flexible_tasks: list[Task],
                       day_start: datetime, day_end: datetime,
-                      now: Optional[datetime] = None) -> list[dict]:
+                      now: Optional[datetime] = None,
+                      earliest: Optional[datetime] = None) -> list[dict]:
     """
     Builds a simple ordered day plan: fixed events stay where they are; flexible tasks
     are dropped into the open gaps between them, preferring (in this order):
       1. A task whose location matches the fixed event that comes right before OR after the gap
          (so you do it on your way, instead of doubling back later)
       2. The highest relevance_score task that still fits the gap's duration
+
+    `earliest` (optional) keeps flexible tasks from being slotted before that time, e.g. "now"
+    when planning the rest of today; fixed events before it still appear in the plan.
 
     Returns a list of {start, end, title, kind, location} dicts in chronological order.
     """
@@ -120,6 +124,8 @@ def build_daily_plan(fixed_events: list[Task], flexible_tasks: list[Task],
 
     for i, event in enumerate(boundaries):
         gap_end = event.fixed_time if event else day_end
+        if earliest and cursor < earliest:
+            cursor = min(earliest, gap_end) if gap_end > cursor else cursor
         gap_minutes = (gap_end - cursor).total_seconds() / 60
         neighbor_location = None
         if i > 0:

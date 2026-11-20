@@ -2,6 +2,10 @@
 pytest>=7.0
 streamlit>=1.30
 
+# Web app (src/server.py + web/)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
 # Google Calendar integration
 google-auth-oauthlib>=1.0
 google-api-python-client>=2.0

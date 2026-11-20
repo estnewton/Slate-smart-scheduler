@@ -32,11 +32,14 @@ src/
   scoring.py                 RICE-inspired relevance scoring (pure logic, fully tested)
   scheduler.py                Auto-generated prep tasks + location-aware daily planner
   demo.py                     Runnable end-to-end CLI demo, mock data, no credentials needed
+  server.py                   FastAPI backend for the web app + Google OAuth flow
+  store.py                    Saves tasks you add / check off (data/state.json, gitignored)
   integrations/
-    google_calendar.py        OAuth read-only sync (needs your own Google Cloud credentials)
+    google_calendar.py        OAuth sync: reads events, writes your plan back (your own Google Cloud credentials)
     canvas.py                 Canvas REST API sync (needs your own Canvas access token)
     ics_sync.py                Import/export .ics, covers Apple Calendar, Outlook, etc.
-app.py                        Local web UI (Streamlit), the one to demo in an interview
+web/                          The web UI (plain HTML/CSS/JS, no build step)
+app.py                        Original Streamlit prototype UI
 tests/
   test_scoring.py
   test_scheduler.py
@@ -45,18 +48,44 @@ tests/
 ## Quickstart (no setup required)
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python -m src.demo          # CLI version, runs the full pipeline on realistic mock data
-streamlit run app.py        # Web UI version, opens at http://localhost:8501 in your browser
-python -m pytest tests/     # 9 tests covering scoring + scheduling logic
+uvicorn src.server:app --reload   # web app at http://localhost:8000
+python -m pytest tests/           # scoring + scheduling tests
+python -m src.demo                # CLI version of the same pipeline
 ```
 
-The web UI shows the ranked task backlog, auto-generated exam/quiz prep, and today's
-location-sequenced plan side by side, plus a form to add your own tasks live. It runs on mock
-data out of the box; flip `USE_MOCK_DATA = False` at the top of `app.py` once your Google
-Calendar is connected (see below) to see your real schedule instead.
+The web app shows:
 
-## Connecting your real calendars (optional)
+- **Day plan**: a timeline of your calendar events with Slate's suggested task blocks slotted into
+  the gaps (location-aware, never in the past). Step through days with ‹ ›.
+- **Up next**: your backlog ranked by relevance score. Check tasks off, or remove ones you added.
+- **Add a task**: title, due date, effort, importance, location. Saved locally across restarts.
+- **Auto prep**: study and review tasks generated from quizzes and exams on your calendar.
+- **This week**: a 7-day strip. Click a day to plan it.
+- **Add plan to Google Calendar**: writes the day's task blocks to your calendar. Running it again
+  replaces Slate's earlier blocks for that day; it never touches your own events.
+
+It runs on demo data until you connect Google Calendar.
+
+## Connecting Google Calendar
+
+One-time setup, about 10 minutes:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com), create a project, and
+   **enable the Google Calendar API** (APIs & Services → Library).
+2. **OAuth consent screen**: choose *External*, fill in the app name and your email, and add
+   your own Google account under **Test users**.
+3. **Credentials → Create credentials → OAuth client ID**, application type **Web application**.
+   Under *Authorized redirect URIs* add exactly `http://localhost:8000/auth/callback`.
+4. Download the JSON, rename it `credentials.json`, and put it in the project root.
+5. Restart the server, open http://localhost:8000, and click **Connect Google Calendar**.
+   Google will warn that the app is unverified (expected for a personal test app). Click
+   *Continue*.
+
+Your token is cached in `token.json`. **Disconnect** in the top bar revokes it.
+
+## Other calendar sources (optional)
 
 **Recommended setup: one integration instead of two.** Canvas has a built-in "Calendar Feed"
 (Canvas -> Calendar -> bottom-right "Calendar Feed" link), a private `.ics` URL you can subscribe
@@ -76,8 +105,8 @@ and `.env`.
 
 ## Current scope vs. roadmap
 
-**Built:** relevance scoring, auto-generated exam/quiz prep tasks, location-aware daily
-sequencing, Google Calendar + Canvas + `.ics` sync.
+**Built:** web app, relevance scoring, auto-generated exam/quiz prep tasks, location-aware daily
+sequencing, two-way Google Calendar sync (read events, write plan), Canvas + `.ics` sync.
 
 **Not yet built (good "phase 2" story):** live business-hours-aware suggestions (e.g., "hit the
 gym before the coffee shop next door opens"), this needs a places/hours API (e.g., Google
