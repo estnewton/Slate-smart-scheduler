@@ -20,7 +20,7 @@ from .demo import mock_week
 from .integrations import google_calendar as gcal
 from .models import Task, TaskSource
 from .scheduler import auto_generate_prep_tasks, build_daily_plan
-from .scoring import rank_tasks
+from .scoring import rank_tasks, urgency
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 LOOKAHEAD_DAYS = 14  # how far ahead to read the calendar (exam prep starts a week out)
@@ -34,13 +34,20 @@ def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat(timespec="minutes") if dt else None
 
 
-def _task_json(task: Task, score: Optional[float] = None) -> dict:
-    return {
+def _task_json(task: Task, score: Optional[float] = None, now: Optional[datetime] = None) -> dict:
+    out = {
         "id": task.id, "title": task.title, "due": _iso(task.due),
         "effort_minutes": task.effort_minutes, "importance": task.importance,
         "location": task.location, "source": task.source.value, "tags": task.tags,
         "score": round(score, 3) if score is not None else None,
     }
+    if score is not None and now is not None:
+        # the pieces of the RICE-style formula, so the UI can explain *why* a task ranks where it does
+        out["breakdown"] = {
+            "urgency": round(urgency(task, now), 3), "importance": task.importance,
+            "confidence": task.confidence, "effort_hours": round(max(task.effort_minutes / 60, 0.05), 2),
+        }
+    return out
 
 
 def _round_up(dt: datetime, minutes: int = 15) -> datetime:
@@ -107,7 +114,7 @@ def _compute(day: date, start_hour: int, end_hour: int) -> dict:
         "hours": [start_hour, end_hour],
         "all_day": [t.title for t in fixed if "all-day" in t.tags and on_day(t, day_dt)],
         "plan": [{**p, "start": _iso(p["start"]), "end": _iso(p["end"])} for p in plan],
-        "ranked": [_task_json(t, s) for t, s in ranked],
+        "ranked": [_task_json(t, s, now) for t, s in ranked],
         "generated": [_task_json(g) for g in sorted(generated, key=lambda g: g.due)],
         "done": [_task_json(t) for t in tasks + generated if t.id in done and t.fixed_time is None],
         "week": week,

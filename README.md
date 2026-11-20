@@ -85,6 +85,23 @@ One-time setup, about 10 minutes:
 
 Your token is cached in `token.json`. **Disconnect** in the top bar revokes it.
 
+### Demo week
+
+To give a live demo something to show, fill the connected calendar with a realistic student week
+(classes, office hours, a quiz, a midterm, a Canvas due date) plus a starter task list:
+
+```bash
+python -m src.demo_calendar seed                    # week starting today
+python -m src.demo_calendar seed --date 2026-12-03  # or starting on a given day
+python -m src.demo_calendar clear                   # remove it all afterwards
+```
+
+Demo events are privately tagged, so `clear` deletes only what `seed` created (plus Slate's plan
+blocks) and never your own events. `seed` clears first, so re-run it before each rehearsal.
+
+> While the OAuth consent screen is in *Testing* mode, Google expires the login after 7 days.
+> Reconnect shortly before a demo.
+
 ## Other calendar sources (optional)
 
 **Recommended setup: one integration instead of two.** Canvas has a built-in "Calendar Feed"

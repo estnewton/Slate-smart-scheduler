@@ -34,7 +34,11 @@
       <button class="icon-btn" id="next" aria-label="Next day">›</button>
       <button class="ghost-btn" id="today-btn" hidden>Back to today</button>
     </div>
-    <button class="primary-btn" id="push-btn" hidden>Add plan to Google Calendar</button>
+    <div class="daynav-right">
+      <span id="synced" class="hint"></span>
+      <button class="ghost-btn sync-btn" id="sync-btn" title="Re-sync with your calendar"><span>↻</span> Sync</button>
+      <button class="primary-btn" id="push-btn" hidden>Add plan to Google Calendar</button>
+    </div>
   </nav>
 
   <main class="grid">

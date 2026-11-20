@@ -2,7 +2,7 @@
 const $ = (sel) => document.querySelector(sel);
 const HOURS = [8, 20];
 
-const state = { date: isoDate(new Date()), status: null, data: null };
+const state = { date: isoDate(new Date()), status: null, data: null, openWhy: new Set() };
 
 // ---------- date helpers ----------
 function isoDate(d) {
@@ -125,8 +125,24 @@ function taskRow(t, { max = 1, done = false } = {}) {
     : `<div class="score"><b>${t.score.toFixed(2)}</b><div class="bar"><i style="width:${pct}%"></i></div>${del}</div>`;
   return `<li class="task">
     <input type="checkbox" class="check" data-done="${esc(t.id)}" ${done ? "checked" : ""} aria-label="Mark ${esc(t.title)} ${done ? "not done" : "done"}">
-    <div><div class="task-title">${esc(t.title)}${auto}</div><div class="task-meta">${meta}</div></div>
+    <div><div class="task-title">${esc(t.title)}${auto}</div><div class="task-meta">${meta}</div>${done ? "" : whyBox(t)}</div>
     ${score}</li>`;
+}
+
+// "Why this rank?" -- shows the RICE-style formula with this task's actual numbers
+function whyBox(t) {
+  const b = t.breakdown;
+  if (!b) return "";
+  const open = state.openWhy.has(t.id) ? " open" : "";
+  const n = (x) => (+x).toFixed(2);
+  return `<details class="why" data-why="${esc(t.id)}"${open}><summary>Why this rank?</summary>
+    <div class="formula">
+      <span><b>${n(b.urgency)}</b>urgency</span><i>×</i>
+      <span><b>${n(b.importance)}</b>importance</span><i>×</i>
+      <span><b>${n(b.confidence)}</b>confidence</span><i>÷</i>
+      <span><b>${n(b.effort_hours)}</b>hours</span><i>=</i>
+      <span class="res"><b>${n(t.score)}</b>score</span>
+    </div></details>`;
 }
 
 function renderLists() {
@@ -171,6 +187,7 @@ async function load() {
   renderTimeline();
   renderLists();
   renderWeek();
+  $("#synced").textContent = `${state.data.source === "google" ? "Synced" : "Updated"} ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }
 
 async function boot() {
@@ -182,6 +199,18 @@ async function boot() {
 // ---------- events ----------
 $("#prev").onclick = () => { state.date = addDays(state.date, -1); load(); };
 $("#next").onclick = () => { state.date = addDays(state.date, 1); load(); };
+$("#sync-btn").onclick = async () => {
+  const btn = $("#sync-btn");
+  btn.classList.add("spin");
+  await load();
+  setTimeout(() => btn.classList.remove("spin"), 400);
+};
+// Coming back to this tab (e.g. after adding an event in Google Calendar) re-syncs automatically.
+window.addEventListener("focus", () => { if (state.status?.connected) load(); });
+document.addEventListener("toggle", (e) => {
+  const id = e.target.dataset?.why;
+  if (id) e.target.open ? state.openWhy.add(id) : state.openWhy.delete(id);
+}, true);
 $("#today-btn").onclick = () => { state.date = isoDate(new Date()); load(); };
 $("#week").onclick = (e) => {
   const b = e.target.closest("[data-day]");

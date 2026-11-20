@@ -73,3 +73,9 @@ def set_done(task_id: str, done: bool) -> None:
         ids.add(task_id) if done else ids.discard(task_id)
         state["done"] = sorted(ids)
         _write(state)
+
+
+def reset() -> None:
+    """Forget all added and completed tasks (used by the demo reset script)."""
+    with _lock:
+        _write({"tasks": [], "done": []})
