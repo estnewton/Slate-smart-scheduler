@@ -92,11 +92,13 @@ def build_daily_plan(fixed_events: list[Task], flexible_tasks: list[Task],
                       now: Optional[datetime] = None,
                       earliest: Optional[datetime] = None) -> list[dict]:
     """
-    Builds a simple ordered day plan: fixed events stay where they are; flexible tasks
-    are dropped into the open gaps between them, preferring (in this order):
-      1. A task whose location matches the fixed event that comes right before OR after the gap
-         (so you do it on your way, instead of doubling back later)
-      2. The highest relevance_score task that still fits the gap's duration
+    Builds an ordered day plan: fixed events stay where they are, and flexible tasks are placed
+    into the open gaps between them, highest relevance score first. For each task Slate picks:
+      1. A slot that finishes before the task is due (a task due at 10am never lands at 2pm).
+      2. Preferably one next to a fixed event at the same location -- right after it, or else
+         right before it -- so errands get batched with the class or appointment that already
+         takes you there.
+      3. Otherwise the earliest slot that fits.
 
     `earliest` (optional) keeps flexible tasks from being slotted before that time, e.g. "now"
     when planning the rest of today; fixed events before it still appear in the plan.
@@ -111,51 +113,60 @@ def build_daily_plan(fixed_events: list[Task], flexible_tasks: list[Task],
     # Only pull flexible tasks that are actually relevant to *this* day: due today (or overdue),
     # or open-ended (no due date). Tasks due further out stay in the backlog for a later day --
     # otherwise a high-importance task due next week would crowd out today's actual to-dos.
-    due_today_or_sooner = [
-        t for t in flexible_tasks
-        if t.due is None or t.due <= day_end
-    ]
+    due_today_or_sooner = [t for t in flexible_tasks if t.due is None or t.due <= day_end]
     ranked = [t for t, _score in rank_tasks(due_today_or_sooner, now)]
-    remaining = list(ranked)
-    plan: list[dict] = []
+    plan_start = max(day_start, earliest) if earliest else day_start
 
-    cursor = day_start
-    boundaries = todays_fixed + [None]  # sentinel for the final gap to day_end
-
-    for i, event in enumerate(boundaries):
+    # Open gaps between fixed events (overlapping events are merged). Each gap fills from the
+    # front (after the previous event) and from the back (before the next one).
+    # "prev" holds the locations of every event in the overlapping group just before the gap.
+    gaps = []
+    cursor, prev_locs = day_start, []
+    for event in todays_fixed + [None]:
         gap_end = event.fixed_time if event else day_end
-        if earliest and cursor < earliest:
-            cursor = min(earliest, gap_end) if gap_end > cursor else cursor
-        gap_minutes = (gap_end - cursor).total_seconds() / 60
-        neighbor_location = None
-        if i > 0:
-            neighbor_location = todays_fixed[i - 1].location
-        elif event:
-            neighbor_location = event.location
-
-        # Try to slot in tasks that fit, preferring ones matching the neighboring location
-        remaining.sort(key=lambda t: (not _location_match(t.location, neighbor_location),))
-        fitted = []
-        for task in list(remaining):
-            if task.effort_minutes <= gap_minutes:
-                fitted.append(task)
-                remaining.remove(task)
-                gap_minutes -= task.effort_minutes
-                if gap_minutes < 10:  # stop once the gap's basically full
-                    break
-
-        for task in fitted:
-            plan.append({
-                "start": cursor, "end": cursor + timedelta(minutes=task.effort_minutes),
-                "title": task.title, "kind": "task", "location": task.location,
-            })
-            cursor += timedelta(minutes=task.effort_minutes)
-
+        start = max(cursor, plan_start)
+        if gap_end > start:
+            gaps.append({"front": start, "back": gap_end, "prev": prev_locs,
+                         "next": event.location if event else None})
         if event:
-            plan.append({
-                "start": event.fixed_time, "end": event.end_time or event.fixed_time,
-                "title": event.title, "kind": "fixed", "location": event.location,
-            })
-            cursor = event.end_time or event.fixed_time
+            if event.fixed_time >= cursor:
+                prev_locs = []  # a new group of events starts
+            prev_locs = prev_locs + [event.location]
+            cursor = max(cursor, event.end_time or event.fixed_time)
 
-    return plan
+    placed: list[dict] = []
+    for task in ranked:
+        length = timedelta(minutes=task.effort_minutes)
+        # A deadline we can still meet today constrains the slot; an already-missed one doesn't.
+        deadline = task.due if task.due and task.due > plan_start else None
+        options = []
+        for g in gaps:
+            if g["back"] - g["front"] < length:
+                continue
+            if any(_location_match(task.location, loc) for loc in g["prev"]):
+                slot, side, match = g["front"], "front", True
+            elif _location_match(task.location, g["next"]):
+                slot, side, match = g["back"] - length, "back", True
+            else:
+                slot, side, match = g["front"], "front", False
+            if deadline and slot + length > deadline:
+                if side == "back" and g["front"] + length <= deadline:
+                    slot, side, match = g["front"], "front", False
+                else:
+                    continue
+            options.append((not match, side == "back", slot, side, g))
+        if not options:
+            continue  # nothing fits today; it stays in the ranked backlog
+        # location match first; among matches, right *after* an event beats right before it
+        # (you're already there); then earliest
+        *_, slot, side, g = min(options, key=lambda o: (o[0], o[1], o[2]))
+        if side == "front":
+            g["front"] = slot + length
+        else:
+            g["back"] = slot
+        placed.append({"start": slot, "end": slot + length, "title": task.title,
+                       "kind": "task", "location": task.location})
+
+    fixed_items = [{"start": e.fixed_time, "end": e.end_time or e.fixed_time, "title": e.title,
+                    "kind": "fixed", "location": e.location} for e in todays_fixed]
+    return sorted(fixed_items + placed, key=lambda p: (p["start"], p["kind"] != "fixed"))

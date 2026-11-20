@@ -49,10 +49,10 @@ def test_location_matching_task_is_preferred_next_to_matching_event():
     home_task = Task(id="t2", title="Laundry", due=today.replace(hour=17), effort_minutes=30,
                       importance=0.9, location="Home")
     plan = build_daily_plan([class_event], [gym, home_task], today, day_end, now=today)
-    # The gym (location match) should be scheduled before the class despite lower importance
-    gym_idx = next(i for i, p in enumerate(plan) if p["title"] == "Gym")
-    class_idx = next(i for i, p in enumerate(plan) if p["title"] == "Class")
-    assert gym_idx < class_idx
+    # The gym (location match) goes right next to the class despite lower importance;
+    # the higher-importance laundry takes the earliest slot instead
+    gym = next(p for p in plan if p["title"] == "Gym")
+    assert gym["start"] == today.replace(hour=11) or gym["end"] == today.replace(hour=10)
 
 
 def test_earliest_keeps_tasks_out_of_the_past_but_keeps_fixed_events():
@@ -64,3 +64,25 @@ def test_earliest_keeps_tasks_out_of_the_past_but_keeps_fixed_events():
                             now=day.replace(hour=13), earliest=day.replace(hour=13))
     assert [p["title"] for p in plan] == ["Class", "Chore"]
     assert plan[1]["start"] == day.replace(hour=13)
+
+
+def test_tasks_finish_before_their_deadline():
+    day = datetime(2026, 1, 1, 0, 0)
+    blocks = [Task(id=f"c{h}", title=f"Class {h}", due=None, effort_minutes=0, importance=0,
+                   fixed_time=day.replace(hour=h), end_time=day.replace(hour=h + 1))
+              for h in (9, 10, 11)]
+    breakfast = Task(id="b", title="Breakfast", due=day.replace(hour=9), effort_minutes=15, importance=0.3)
+    plan = build_daily_plan(blocks, [breakfast], day.replace(hour=8), day.replace(hour=18), now=day)
+    slot = next(p for p in plan if p["title"] == "Breakfast")
+    assert slot["end"] <= day.replace(hour=9)
+
+
+def test_errand_is_batched_right_after_appointment_at_same_place():
+    day = datetime(2026, 1, 1, 0, 0)
+    doctor = Task(id="d", title="Doctor", due=None, effort_minutes=0, importance=0,
+                  fixed_time=day.replace(hour=14), end_time=day.replace(hour=15), location="Clinic")
+    pickup = Task(id="p", title="Pick up prescription", due=day.replace(hour=17),
+                  effort_minutes=15, importance=0.6, location="Clinic")
+    plan = build_daily_plan([doctor], [pickup], day.replace(hour=8), day.replace(hour=18), now=day)
+    slot = next(p for p in plan if p["title"] == "Pick up prescription")
+    assert slot["start"] == day.replace(hour=15)

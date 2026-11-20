@@ -124,7 +124,7 @@ function layoutColumns(plan, minsFrom, hourPx) {
     .map((p) => {
       const top = Math.max(0, minsFrom(p.start)) * hourPx / 60;
       const dur = Math.max(minsFrom(p.end) - minsFrom(p.start), 0);
-      return { ...p, top, height: Math.max(dur * hourPx / 60 - 2, 20) };
+      return { ...p, top, height: Math.max(dur * hourPx / 60 - 2, 17) };
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
 
