@@ -99,8 +99,12 @@ def _compute(day: date, start_hour: int, end_hour: int) -> dict:
     flexible = [t for t in tasks if t.fixed_time is None and t.id not in done]
 
     ranked = rank_tasks(flexible + generated, now=now)
+    plannable = flexible + generated
+    if day > date.today():
+        # Looking ahead: anything due before that day is assumed handled by then.
+        plannable = [t for t in plannable if t.due is None or t.due >= day_dt]
     plan = build_daily_plan(
-        fixed_events=timed_fixed, flexible_tasks=flexible + generated,
+        fixed_events=timed_fixed, flexible_tasks=plannable,
         day_start=day_dt.replace(hour=start_hour), day_end=day_dt.replace(hour=end_hour),
         now=now, earliest=_round_up(now) if day == date.today() else None,
     )
