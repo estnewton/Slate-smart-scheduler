@@ -15,8 +15,13 @@ from typing import Optional
 from .models import Task, TaskSource
 from .scoring import rank_tasks
 
-EXAM_KEYWORDS = ("exam", "midterm", "final")
-QUIZ_KEYWORDS = ("quiz", "test")
+import re
+
+EXAM_RE = re.compile(r"\b(exam|midterm|final)s?\b", re.I)
+QUIZ_RE = re.compile(r"\b(quiz|test)(zes|s)?\b", re.I)
+# Events *about* an exam aren't the exam: "Study group for Math Quiz", "IE 302 midterm review"
+PREP_RE = re.compile(r"\b(study|studying|review|prep|preparation|group|session|tutoring|"
+                     r"office hours|practice|mock)\b", re.I)
 
 
 def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] = None) -> list[Task]:
@@ -34,9 +39,10 @@ def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] =
     for event in fixed_events:
         if event.fixed_time is None:
             continue
-        title_lower = event.title.lower()
+        if PREP_RE.search(event.title):
+            continue
 
-        if any(k in title_lower for k in EXAM_KEYWORDS):
+        if EXAM_RE.search(event.title):
             for days_before, importance in [(7, 0.6), (1, 0.9)]:
                 counter += 1
                 study_time = event.fixed_time - timedelta(days=days_before)
@@ -52,7 +58,7 @@ def auto_generate_prep_tasks(fixed_events: list[Task], now: Optional[datetime] =
                         tags=["exam-prep"] + event.tags,
                     ))
 
-        elif any(k in title_lower for k in QUIZ_KEYWORDS):
+        elif QUIZ_RE.search(event.title):
             # the evening before (9pm), not a fixed offset that lands at 2am for an evening quiz
             night_before = (event.fixed_time - timedelta(days=1)).replace(hour=21, minute=0)
             if night_before > now:

@@ -96,3 +96,12 @@ def test_meal_reminder_lands_right_before_the_quiz():
     plan = build_daily_plan([quiz], gen, day.replace(hour=8), day.replace(hour=22), now=day.replace(hour=7))
     snack = next(p for p in plan if p["title"] == "Eat a snack before Math Quiz")
     assert snack["end"] == day.replace(hour=17)
+
+
+def test_events_about_a_quiz_are_not_quizzes():
+    day = datetime(2026, 1, 1, 0, 0)
+    group = Task(id="g", title="Study group for Math Quiz", due=None, effort_minutes=0, importance=0,
+                 fixed_time=day + timedelta(days=2, hours=12))
+    contest = Task(id="c", title="Coding contest", due=None, effort_minutes=0, importance=0,
+                   fixed_time=day + timedelta(days=2, hours=15))
+    assert auto_generate_prep_tasks([group, contest], now=day) == []

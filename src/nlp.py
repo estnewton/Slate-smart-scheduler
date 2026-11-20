@@ -30,8 +30,9 @@ _MONTH_ALT = "|".join(sorted(_MONTHS, key=len, reverse=True))
 _WEEKDAY_ALT = "|".join(sorted(_WEEKDAYS, key=len, reverse=True))
 
 _T = r"(\d{1,2}|noon|midnight)(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?"
-_RANGE = re.compile(rf"\b(?:from\s+)?{_T}\s*(?:-|–|—|\bto\b|\buntil\b|\btill\b)\s*{_T}(?![\w/])", re.I)
-_SINGLE = re.compile(r"\b(?:at\s+|@\s*)?(?:(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)|(\d{1,2}):(\d{2})|(noon|midnight))(?!\w)", re.I)
+_RANGE = re.compile(rf"\b(?:from\s+|at\s+|@\s*)?{_T}\s*(?:-|–|—|\bto\b|\buntil\b|\btill\b)\s*{_T}(?![\w/])", re.I)
+_SINGLE = re.compile(r"\b(?:at\s+|@\s*)?(?:(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)|(\d{1,2}):(\d{2})|(noon|midnight))(?!\w)"
+                     r"|\b(?:at|@)\s*(\d{1,2})(?![\d:/\w])", re.I)
 _MONTH_DAY = re.compile(rf"\b(?:on\s+)?(?:the\s+)?({_MONTH_ALT})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:,?\s+(\d{{4}}))?\b", re.I)
 _DAY_MONTH = re.compile(rf"\b(?:on\s+)?(?:the\s+)?(\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?({_MONTH_ALT})\b(?:,?\s+(\d{{4}}))?", re.I)
 _NUMERIC = re.compile(r"\b(?:on\s+)?(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b")
@@ -102,8 +103,10 @@ def _parse_times(text: str):
         return start, end, m.span()
     m = _SINGLE.search(text)
     if m:
-        h_ap, m_ap, ap, h_colon, m_colon, named = m.groups()
-        if named:
+        h_ap, m_ap, ap, h_colon, m_colon, named, h_bare = m.groups()
+        if h_bare:
+            h, mins = _guess_pm(int(h_bare)), 0
+        elif named:
             h, mins = _hour(named), 0
         elif h_ap:
             h, mins = _apply_meridiem(int(h_ap), ap), int(m_ap or 0)
@@ -190,11 +193,14 @@ def _tidy_case(text: str) -> str:
     return " ".join(out)
 
 
+_LONE_FILLER = {"on", "from", "at", "in", "for", "the", "a", "an", "to", "@", "and"}
+
+
 def _clean(fragment: str) -> str:
     s = fragment.strip(" ,.;-")
     for _ in range(4):
         s = _EDGE_FILLER.sub("", s).strip(" ,.;-")
-    return s
+    return "" if s.lower() in _LONE_FILLER else s
 
 
 def parse_event(text: str, base: date) -> ParsedEvent:

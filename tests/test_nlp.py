@@ -53,3 +53,11 @@ def test_video_call_location():
 def test_same_hour_range_with_minutes():
     e = parse_event("coffee chat with recruiter thursday 2-2:30pm on zoom", BASE)
     assert (e.start.hour, e.start.minute, e.end.hour, e.end.minute) == (14, 0, 14, 30)
+
+
+def test_no_stray_at_and_bare_hour():
+    e = parse_event("math exam on tuesday at 6-8pm", BASE)
+    assert e.title == "Math Exam" and (e.start.hour, e.end.hour) == (18, 20)
+    e = parse_event("math exam at 6 tuesday", BASE)
+    assert e.title == "Math Exam" and not e.all_day and e.location is None
+    assert e.start == datetime(2027, 1, 12, 18, 0)

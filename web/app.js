@@ -316,7 +316,17 @@ $("#sync-btn").onclick = async () => {
   setTimeout(() => btn.classList.remove("spin"), 400);
 };
 // Coming back to this tab (e.g. after adding an event in Google Calendar) re-syncs automatically.
-window.addEventListener("focus", () => { if (state.status?.connected) load(); });
+// Switching back to this tab (or window) re-syncs, so an event just added in Google Calendar
+// shows up and the suggested tasks re-plan around it. Throttled so tab + window events don't
+// double-fire.
+let lastAutoSync = 0;
+function autoSync() {
+  if (!state.status?.connected || document.hidden || Date.now() - lastAutoSync < 1500) return;
+  lastAutoSync = Date.now();
+  load();
+}
+document.addEventListener("visibilitychange", autoSync);
+window.addEventListener("focus", autoSync);
 document.addEventListener("toggle", (e) => {
   const id = e.target.dataset?.why;
   if (id) e.target.open ? state.openWhy.add(id) : state.openWhy.delete(id);
